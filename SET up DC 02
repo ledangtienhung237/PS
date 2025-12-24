@@ -1,0 +1,115 @@
+
+# 🧱 Setup DC02 – Secondary Domain Controller (Runbook)
+
+## 🎯 Goal
+
+Triển khai **DC02** làm **Secondary Domain Controller** cho domain `hunter-audio.com` với:
+
+* DNS replication
+* GC / KDC
+* AD health chuẩn enterprise
+
+---
+
+## 1️⃣ Network Baseline (BẮT BUỘC)
+
+**WHY:** DC phải locate domain qua AD DNS, không dùng Azure DNS.
+
+```powershell
+# Set DNS về DC01
+$nic = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+Set-DnsClientServerAddress -InterfaceIndex $nic.InterfaceIndex -ServerAddresses "10.160.17.4"
+
+# Disable IPv6 (lab best practice)
+Disable-NetAdapterBinding -Name $nic.Name -ComponentID ms_tcpip6
+
+ipconfig /flushdns
+Restart-Computer
+```
+
+✅ Expected:
+
+```
+DNS Servers : 10.160.17.4
+Primary DNS Suffix : (blank)
+```
+
+---
+
+## 2️⃣ Join DC02 vào Domain
+
+```powershell
+Add-Computer -DomainName hunter-audio.com -Restart
+```
+
+Verify:
+
+```powershell
+systeminfo | findstr /i domain
+```
+
+---
+
+## 3️⃣ Cài AD DS Role
+
+```powershell
+Install-WindowsFeature AD-Domain-Services -IncludeManagementTools
+```
+
+---
+
+## 4️⃣ Promote DC02 thành Domain Controller
+
+**NOTE:** Phải dùng **Domain Admin** (`hunter-audio\hunter`).
+
+```powershell
+Install-ADDSDomainController `
+-DomainName "hunter-audio.com" `
+-InstallDns `
+-Credential (Get-Credential) `
+-NoGlobalCatalog:$false
+```
+
+* Nhập Domain Admin credential
+* Tạo **DSRM password**
+* Chọn **Yes to All**
+* Máy **tự reboot** = PROMOTE OK
+
+---
+
+## 5️⃣ Post-Promotion Verification (KHÔNG BỎ QUA)
+
+### DC discovery
+
+```powershell
+nltest /dsgetdc:hunter-audio.com
+```
+
+### Replication
+
+```powershell
+repadmin /replsummary
+```
+
+Expected: `fails = 0`
+
+### AD health
+
+```powershell
+dcdiag /e /v
+```
+
+Expected: no DNS / NetLogon / Advertising errors
+
+---
+
+## ✅ Result
+
+* DC02 = GC + KDC + DNS
+* Replication DC01 ↔ DC02 OK
+* Domain & Forest healthy
+* Ready for **PKI / AADC / ADFS / NPS**
+
+---
+
+
