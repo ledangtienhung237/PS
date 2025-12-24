@@ -1,0 +1,70 @@
+Check PS verion:
+$PSVersionTable
+
+
+Script cài PowerShell 7.1 (official – MSI silent):
+
+$uri = "https://github.com/PowerShell/PowerShell/releases/download/v7.1.5/PowerShell-7.1.5-win-x64.msi"
+$msiPath = "$env:TEMP\PowerShell-7.1.5-win-x64.msi"
+
+Invoke-WebRequest -Uri $uri -OutFile $msiPath
+
+Start-Process msiexec.exe -Wait -ArgumentList @(
+    "/i `"$msiPath`"",
+    "/qn",
+    "ADD_EXPLORER_CONTEXT_MENU_OPENPOWERSHELL=1",
+    "ADD_FILE_CONTEXT_MENU_RUNPOWERSHELL=1",
+    "ENABLE_PSREMOTING=1",
+    "REGISTER_MANIFEST=1"
+)
+
+Xác định card mạng đang hoạt động không?
+$nic = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+
+
+Set DNS chỉ về chính Domain Controller vì nếu không sẽ lôi
+Set-DnsClientServerAddress -InterfaceIndex $nic.InterfaceIndex `
+    -ServerAddresses "10.160.17.4"
+
+
+➡️ Chỉ DC mới hiểu các record này
+
+Vì sao KHÔNG được dùng:
+
+Azure DNS (168.63.129.16)
+
+Google DNS
+
+Gateway DNS
+
+👉 Những DNS này KHÔNG có SRV records của AD
+
+IMPACT nếu không làm
+
+Lỗi sẽ KHÔNG xuất hiện ngay, mà:
+
+ADFS trust fail
+
+Hybrid Join treo
+
+MFA fail ngẫu nhiên
+
+Kerberos delay 20–30s
+
+dsregcmd sai state
+
+➡️ Đây là loại lỗi rất tốn thời gian debug
+
+
+Disable IPv6 trên NIC:
+
+Disable-NetAdapterBinding -Name $nic.Name -ComponentID ms_tcpip6
+
+
+
+Flush DNS cache:
+
+ipconfig /flushdns
+
+
+
